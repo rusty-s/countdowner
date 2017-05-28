@@ -1,6 +1,8 @@
 import datetime as dt
 from collections import OrderedDict
 from pathlib import Path
+import os
+import json
 
 import requests
 import pandas as pd
@@ -9,6 +11,17 @@ import curio
 import curio_http
 from bs4 import BeautifulSoup
 
+
+ROOT = Path(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+def get_secret(key, secrets_path=ROOT/'secrets.json'):
+    """
+    Open the JSON file at ``secrets_path``, and return the value corresponding to the given key. 
+    """
+    secrets_path = Path(secrets_path)
+    with secrets_path.open() as src:
+        secrets = json.load(src)
+    return secrets[key]
 
 def read_products(path):
     """
@@ -71,7 +84,7 @@ def parse_product(html):
         d['sale_price'] = None    
         d['price'] = price_to_float(list(s3.stripped_strings)[0])
     
-    d['unit_price'] = soup.find('div', class_='cup-price').string or None        
+    d['unit_price'] = soup.find('div', class_='cup-price').string.strip() or None        
     d['datetime'] = dt.datetime.now().strftime('%Y-%m-%dT%H:%M:%S')
 
     return d
@@ -132,13 +145,49 @@ async def collect_products_a(stock_codes, as_df=True):
     
     return results.sort_values('name')
 
-def run_pipeline(in_path, out_path):
+def email(products, subject, key, as_html=True):
+    """
+    """
+
+    url = "https://api.mailgun.net/v3/sandbox6de202ffd7c148a99c36a01718d1c2d1.mailgun.org/messages"
+    auth = ("api", "key-1b64688d5f489f42085d15eb83972555")
+    data = {
+        "from": "Mailgun Sandbox <postmaster@sandbox6de202ffd7c148a99c36a01718d1c2d1.mailgun.org>",
+        "to": "ibatatas <ibatatas@runbox.com>",
+        "subject": subject,
+    }
+    if as_html:
+        data['html'] = products.to_html(index=False, float_format='%.2f')
+    else:
+        data['text'] = products.to_string(index=False, float_format='%.2f')
+
+    return requests.post(url, auth=auth, data=data)
+
+def filter_sales(products):
+    """
+    """
+    cols = ['name', 'sale_price', 'price']
+    f = products.loc[products['on_sale'], cols].copy()
+    f['discount'] = 1 - f['sale_price']/f['price']
+    return f
+
+def run_pipeline(in_path, out_path, key=None, as_html=False):
     """
     Read a product CSV located at ``in_path`` (string or Path object), one that :func:`read_products` can read, collect all the product information from Countdown, and write the result to a CSV located at ``out_path`` (string or Path object).
     """
+    # Read products
     in_path = Path(in_path)
     products = read_products(in_path)
+    
+    # Collect updates
     codes = products['stock_code']
-    f = curio.run(collect_product_info_a(codes))
-    out_path = Path(out_path)
+    f = curio.run(collect_products_a(codes))
+    
+    # Write product updates
     f.to_csv(str(out_path), index=False)
+    
+    # Filter sale items
+    g = filter_sales(f)
+    if not g.empty and key is not None:
+         # Email
+         email(g, 'Countdown sales', key, as_html=as_html)
