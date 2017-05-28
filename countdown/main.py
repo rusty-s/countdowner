@@ -3,7 +3,10 @@ from collections import OrderedDict
 from pathlib import Path
 import os
 import json
+import io 
+import re 
 
+import yaml
 import requests
 import pandas as pd
 import numpy as np
@@ -13,28 +16,107 @@ from bs4 import BeautifulSoup
 
 
 ROOT = Path(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+WATCHLIST_FIELDS = [
+  'name',
+  'email_address',
+  'products',
+]
+EMAIL_PATTERN = re.compile(r'[^@]+@[^@]+\.[^@]+')
 
-def get_secret(key, secrets_path=ROOT/'secrets.json'):
+#---------------------
+# Watchlist functions
+#---------------------
+def read_watchlist(path):
     """
-    Open the JSON file at ``secrets_path``, and return the value corresponding to the given key. 
-    """
-    secrets_path = Path(secrets_path)
-    with secrets_path.open() as src:
-        secrets = json.load(src)
-    return secrets[key]
+    Read a YAML file of watchlist data at the given path, parse the file,
+    check it, and return the resulting watchlist dictionary.
+    The YAML file should have the following form::
 
-def read_products(path):
+        - name: Hello
+        - email_address: a@b.com
+        - products: |
+            description,stock_code
+            mustard,021143
+            chips bro,453899
+
     """
-    Read the CSV file located at the given path (string or Path object), convert it to a DataFrame, and return the result.
-    Raise a ``ValueError`` if the file does not contain a ``stock_code`` field.
-    """
+    # Read
     path = Path(path)
-    f = pd.read_csv(path, dtype={'stock_code': str})
-    if 'stock_code' not in f.columns:
-        raise ValueError('Product CSV must contain a stock_code field')
-        
-    return f
+    with path.open('r') as src:
+        watchlist_yaml = yaml.load(src)
 
+    # Parse
+    watchlist = parse_watchlist(watchlist_yaml)
+
+    # Check
+    check_watchlist(watchlist)
+
+    # Create
+    return watchlist
+
+def parse_df(csv_text, **kwargs):
+    """
+    Given a CSV text with a header, convert it to a data frame and
+    return the result. 
+    """
+    csv = io.StringIO(csv_text)
+    return pd.read_table(csv, sep=',', **kwargs)
+
+def parse_watchlist(watchlist_yaml):
+    """
+    Given a (decoded) YAML dictionary representing a fare structure
+    convert the CSV text fields to data frames and return the resulting
+    dictionary.
+    If keys are missing from the dictionary, add them and set their values
+    to ``None`` to aid format checking in :func:`check_fare_structure`.
+    If the YAML dict comes from a file located at the path 
+    ``yaml_path``, then use that path to fill in the fare structure name 
+    (if missing) and make absolute the fare structure zones path (if given).
+    """
+    w = {}
+
+    # Set all missing keys to None
+    for key in WATCHLIST_FIELDS:
+        if key in watchlist_yaml:
+            w[key] = watchlist_yaml[key]
+        else:
+            w[key] = None
+
+    if w['products'] is not None:
+        w['products'] = parse_df(w['products'], dtype={'stock_code': str})
+    
+    return w
+
+def valid_email(x):
+    """
+    Return ``True`` if ``x`` is a valid email address; otherwise return ``False``.
+    """
+    if isinstance(x, str) and re.match(EMAIL_PATTERN, x):
+        return True
+    else:
+        return False
+
+def check_watchlist(watchlist):
+    """
+    Raise an error if the given watchlist (dictionary) is invalid.
+    Otherwise return the dictionary.
+    """
+    w = watchlist
+    if not isinstance(w['name'], str) or not len(w['name']):
+        raise ValueError('Name must be a nonempty string')
+
+    if not valid_email(w['email_address']):
+        raise ValueError('Invalid email address')
+
+    p = w['products']
+    if p is None:
+        raise ValueError('Products must be given')
+    if not set(['description', 'stock_code']) <= set(p.columns):
+        raise ValueError('Products must have "description" and "stock_code" fields')
+   
+#-------------------------
+# Countdown API functions
+#-------------------------
 def get_product(stock_code):
     """
     Issue a GET request to Countdown at https://shop.countdown.co.nz/Shop/ProductDetails with the given stock code (string).
@@ -54,7 +136,17 @@ def price_to_float(price_string):
               
 def parse_product(html):
     """
-    Given a response from the Countdown API, parse it, and return in as a dictionary.
+    Given a response from the Countdown API, parse it, and return in as a dictionary with the keys and values:
+
+    - ``'stock_code'``
+    - ``'name'``
+    - ``'description'``
+    - ``'size'``
+    - ``'on_sale'``
+    - ``'sale_price'``
+    - ``'price'``
+    - ``'unit_price'``
+    - ``'datetime'``
     """
     # Parse response
     d = OrderedDict()
@@ -92,7 +184,7 @@ def parse_product(html):
 def collect_products(stock_codes, as_df=True):
     """
     For each item in the given list of stock codes (list of strings), call :func:`get_product`, parse the responses, and return the results as a list of dictionaries.
-    If ``as_df``, then return the result as a DataFrame.
+    If ``as_df``, then return the result as a DataFrame with columns equal to the keys listed in :func:`parse_product`.
     """
     for code in stock_codes:
         try:
@@ -110,7 +202,7 @@ def collect_products(stock_codes, as_df=True):
         
     return results
 
-MAX_CONNECTIONS_PER_HOST = 10
+MAX_CONNECTIONS_PER_HOST = 100
 sema = curio.BoundedSemaphore(MAX_CONNECTIONS_PER_HOST)
 
 async def get_product_a(stock_code):
@@ -145,16 +237,30 @@ async def collect_products_a(stock_codes, as_df=True):
     
     return results.sort_values('name')
 
-def email(products, subject, key, as_html=True):
+#-------------------------
+# Data pipeline functions
+#-------------------------
+def get_secret(key, secrets_path=ROOT/'secrets.json'):
     """
+    Open the JSON file at ``secrets_path``, and return the value corresponding to the given key. 
+    """
+    secrets_path = Path(secrets_path)
+    with secrets_path.open() as src:
+        secrets = json.load(src)
+    return secrets[key]
+
+def email(products, email_address, key, as_html=True):
+    """
+    Email the given product DataFrame to the given email address using Mailgun with the given API key.
+    If ``as_html``, then write the email body as HTML; otherwise, write it as text.
     """
 
-    url = "https://api.mailgun.net/v3/sandbox6de202ffd7c148a99c36a01718d1c2d1.mailgun.org/messages"
-    auth = ("api", "key-1b64688d5f489f42085d15eb83972555")
+    url = 'https://api.mailgun.net/v3/sandbox6de202ffd7c148a99c36a01718d1c2d1.mailgun.org/messages'
+    auth = ('api', key)
     data = {
-        "from": "Mailgun Sandbox <postmaster@sandbox6de202ffd7c148a99c36a01718d1c2d1.mailgun.org>",
-        "to": "ibatatas <ibatatas@runbox.com>",
-        "subject": subject,
+        'from': 'Mailgun Sandbox <postmaster@sandbox6de202ffd7c148a99c36a01718d1c2d1.mailgun.org>',
+        'to': email_address,
+        'subject': 'Countdown sales',
     }
     if as_html:
         data['html'] = products.to_html(index=False, float_format='%.2f')
@@ -165,29 +271,37 @@ def email(products, subject, key, as_html=True):
 
 def filter_sales(products):
     """
+    Given a DataFrame of products of the form returned by :func:`collect_products`, keep only the items on sale and the columns ``['name', 'sale_price', 'price']``.
     """
     cols = ['name', 'sale_price', 'price']
     f = products.loc[products['on_sale'], cols].copy()
     f['discount'] = 1 - f['sale_price']/f['price']
     return f
 
-def run_pipeline(in_path, out_path, key=None, as_html=False):
+def run_pipeline(watchlist_path, out_dir, key=None, as_html=False):
     """
-    Read a product CSV located at ``in_path`` (string or Path object), one that :func:`read_products` can read, collect all the product information from Countdown, and write the result to a CSV located at ``out_path`` (string or Path object).
+    Read a YAML watchlist located at ``watchlist_path`` (string or Path object), one that :func:`read_watchlist` can read, collect all the product information from Countdown, and write the result to a CSV located in the directory ``out_dir`` (string or Path object), creating the directory if it does not exist.
+    If ``key`` (string; Mailgun API key) is given, then email the products on sale (if there are any) using :func:`email`.
     """
     # Read products
-    in_path = Path(in_path)
-    products = read_products(in_path)
+    watchlist_path = Path(watchlist_path)
+    w = read_watchlist(watchlist_path)
     
     # Collect updates
-    codes = products['stock_code']
+    codes = w['products']['stock_code']
     f = curio.run(collect_products_a(codes))
     
     # Write product updates
-    f.to_csv(str(out_path), index=False)
+    out_dir = Path(out_dir)
+    if not out_dir.exists():
+        out_dir.mkdir(parents=True)
+
+    t = dt.datetime.now()
+    path = out_dir/'{!s}_prices_{:%Y-%m-%dT%H:%M}'.format(w['name'], t)
+    f.to_csv(str(path), index=False)
     
     # Filter sale items
     g = filter_sales(f)
     if not g.empty and key is not None:
-         # Email
-         email(g, 'Countdown sales', key, as_html=as_html)
+        # Email
+        email(g, w['email_address'], key, as_html=as_html)
