@@ -245,6 +245,14 @@ async def collect_products_a(stock_codes, as_df=True):
 #-------------------------
 # Data pipeline functions
 #-------------------------
+def filter_sales(products):
+    """
+    Given a DataFrame of products of the form returned by :func:`collect_products`, keep only the items on sale and the columns ``['name', 'sale_price', 'price', 'discount']``.
+    """
+    cols = ['name', 'sale_price', 'price', 'discount']
+    f = products.loc[products['on_sale'], cols].copy()
+    return f
+
 def get_secret(key, secrets_path=ROOT/'secrets.json'):
     """
     Open the JSON file at ``secrets_path``, and return the value corresponding to the given key. 
@@ -273,14 +281,6 @@ def email(products, email_address, key, as_html=True):
         data['text'] = products.to_string(index=False, float_format='%.2f')
 
     return requests.post(url, auth=auth, data=data)
-
-def filter_sales(products):
-    """
-    Given a DataFrame of products of the form returned by :func:`collect_products`, keep only the items on sale and the columns ``['name', 'sale_price', 'price', 'discount']``.
-    """
-    cols = ['name', 'sale_price', 'price', 'discount']
-    f = products.loc[products['on_sale'], cols].copy()
-    return f
 
 def run_pipeline(watchlist_path, out_dir, key=None, as_html=True):
     """

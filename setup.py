@@ -12,14 +12,14 @@ setup(
     version='0.0.0',
     author='Alex Raichev',
     url='',
-    description='A Python 3.5+ project to watch for sales at Countdown grocery stores throughout New Zealand',
+    description='A Python 3.5+ package to check for sales at Countdown grocery stores throughout New Zealand',
     long_description=readme,
     license=license,
     install_requires=[
         'click>=6.7',
     ],
     entry_points = {
-        'console_scripts': ['countdownit=countdown.cli:countdownit'],
+        'console_scripts': ['countdownit=countdowner.cli:countdownit'],
     },
     packages=find_packages(exclude=('tests', 'docs')),   
 )
