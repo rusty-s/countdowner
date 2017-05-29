@@ -1,6 +1,7 @@
 appdirs==1.4.3
 beautifulsoup4==4.6.0
 bleach==2.0.0
+click==6.7
 curio==0.7
 curio-http==0.1.0
 decorator==4.0.11

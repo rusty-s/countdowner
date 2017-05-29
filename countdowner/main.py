@@ -36,8 +36,8 @@ def read_watchlist(path):
         - email_address: a@b.com
         - products: |
             description,stock_code
-            mustard,021143
-            chips bro,453899
+            chips sis,267945
+            bagels bro,285453
 
     """
     # Read
@@ -175,7 +175,12 @@ def parse_product(html):
         d['on_sale'] = False
         d['sale_price'] = None    
         d['price'] = price_to_float(list(s3.stripped_strings)[0])
-    
+
+    if d['on_sale']:
+        d['discount'] = 1 - d['sale_price']/d['price']
+    else:
+        d['discount'] = None 
+
     d['unit_price'] = soup.find('div', class_='cup-price').string.strip() or None        
     d['datetime'] = dt.datetime.now().strftime('%Y-%m-%dT%H:%M:%S')
 
@@ -258,9 +263,9 @@ def email(products, email_address, key, as_html=True):
     url = 'https://api.mailgun.net/v3/sandbox6de202ffd7c148a99c36a01718d1c2d1.mailgun.org/messages'
     auth = ('api', key)
     data = {
-        'from': 'Mailgun Sandbox <postmaster@sandbox6de202ffd7c148a99c36a01718d1c2d1.mailgun.org>',
+        'from': 'Countdowner <postmaster@sandbox6de202ffd7c148a99c36a01718d1c2d1.mailgun.org>',
         'to': email_address,
-        'subject': 'Countdown sales',
+        'subject': 'Countdown sale on your watchlist items',
     }
     if as_html:
         data['html'] = products.to_html(index=False, float_format='%.2f')
@@ -271,14 +276,13 @@ def email(products, email_address, key, as_html=True):
 
 def filter_sales(products):
     """
-    Given a DataFrame of products of the form returned by :func:`collect_products`, keep only the items on sale and the columns ``['name', 'sale_price', 'price']``.
+    Given a DataFrame of products of the form returned by :func:`collect_products`, keep only the items on sale and the columns ``['name', 'sale_price', 'price', 'discount']``.
     """
-    cols = ['name', 'sale_price', 'price']
+    cols = ['name', 'sale_price', 'price', 'discount']
     f = products.loc[products['on_sale'], cols].copy()
-    f['discount'] = 1 - f['sale_price']/f['price']
     return f
 
-def run_pipeline(watchlist_path, out_dir, key=None, as_html=False):
+def run_pipeline(watchlist_path, out_dir, key=None, as_html=True):
     """
     Read a YAML watchlist located at ``watchlist_path`` (string or Path object), one that :func:`read_watchlist` can read, collect all the product information from Countdown, and write the result to a CSV located in the directory ``out_dir`` (string or Path object), creating the directory if it does not exist.
     If ``key`` (string; Mailgun API key) is given, then email the products on sale (if there are any) using :func:`email`.
