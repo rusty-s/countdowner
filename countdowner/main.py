@@ -176,9 +176,9 @@ def parse_product(html):
         d['price'] = price_to_float(list(s3.stripped_strings)[0])
 
     if d['on_sale']:
-        d['discount'] = 1 - d['sale_price']/d['price']
+        d['discount_percentage'] = 100*(1 - d['sale_price']/d['price'])
     else:
-        d['discount'] = None 
+        d['discount_percentage'] = None 
 
     d['unit_price'] = soup.find('div', class_='cup-price').string.strip() or None        
     d['datetime'] = dt.datetime.now().strftime('%Y-%m-%dT%H:%M:%S')
@@ -256,7 +256,7 @@ def filter_sales(products):
     """
     Given a DataFrame of products of the form returned by :func:`collect_products`, keep only the items on sale and the columns ``['name', 'sale_price', 'price', 'discount']``.
     """
-    cols = ['name', 'sale_price', 'price', 'discount']
+    cols = ['name', 'sale_price', 'price', 'discount_percentage']
     f = products.loc[products['on_sale'], cols].copy()
     return f
 
