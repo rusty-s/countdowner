@@ -39,3 +39,4 @@ Notes
 ======
 - Development status is Alpha
 - This project uses semantic versioning
+- I might extend this to New World stores once they roll out `more online shopping <http://www.newworld.co.nz/online-shopping/>`_
