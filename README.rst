@@ -6,7 +6,7 @@ Pretty rough, but gets the job done.
 
 Installation
 =============
-``pip install git+https://github.com/araichev/countdowner``
+``pip install -U git+https://github.com/araichev/countdowner``
 
 
 Usage
@@ -27,7 +27,7 @@ Here is a common workflow.
 	  Earthcare double toilet paper,381895
 	  Dijon mustard,700630
 
-#. Use the ``countdowner`` library functions as in the IPython notebook at ``ipynb/examples.ipynb``) or run ``countdownit --help`` from the command line for information on the command line tool.  To use the emailing functionality of ``countdowner``, you'll need a (free) `Mailgun account <https://mailgun.com>`_.
+#. Use the ``countdowner`` library functions as in the IPython notebook at ``ipynb/examples.ipynb`` or run ``countdownit --help`` from the command line for information on the command line tool.  To use the emailing functionality of ``countdowner``, you'll need a (free) `Mailgun account <https://mailgun.com>`_.
 
 
 Authors
