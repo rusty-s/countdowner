@@ -22,7 +22,7 @@ setup(
         'curio-http>=0.1.0',
         'beautifulsoup4==4.6.0',
         'lxml==3.7.3',
-        'pandas>=0.20.0',
+        'pandas>=0.19.0',
         'click>=6.7',
     ],
     entry_points = {
