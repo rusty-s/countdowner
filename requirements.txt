@@ -2,11 +2,11 @@ appdirs==1.4.3
 beautifulsoup4==4.6.0
 bleach==2.0.0
 click==6.7
+-e git+git@github.com:araichev/countdowner.git@d6043f76be2e84abbfc294a9bcb4a33c69dc7a09#egg=countdowner
 curio==0.7
 curio-http==0.1.0
 decorator==4.0.11
 entrypoints==0.2.2
-gevent==1.2.1
 greenlet==0.4.12
 h11==0.7.0
 html5lib==0.999999999

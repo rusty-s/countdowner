@@ -25,35 +25,7 @@ EMAIL_PATTERN = re.compile(r'[^@]+@[^@]+\.[^@]+')
 
 #---------------------
 # Watchlist functions
-#---------------------
-def read_watchlist(path):
-    """
-    Read a YAML file of watchlist data at the given path, parse the file,
-    check it, and return the resulting watchlist dictionary.
-    The YAML file should have the following form::
-
-        - name: Hello
-        - email_address: a@b.com
-        - products: |
-            description,stock_code
-            chips sis,267945
-            bagels bro,285453
-
-    """
-    # Read
-    path = Path(path)
-    with path.open('r') as src:
-        watchlist_yaml = yaml.load(src)
-
-    # Parse
-    watchlist = parse_watchlist(watchlist_yaml)
-
-    # Check
-    check_watchlist(watchlist)
-
-    # Create
-    return watchlist
-
+#--------------------- 
 def parse_df(csv_text, **kwargs):
     """
     Given a CSV text with a header, convert it to a data frame and
@@ -99,7 +71,6 @@ def valid_email(x):
 def check_watchlist(watchlist):
     """
     Raise an error if the given watchlist (dictionary) is invalid.
-    Otherwise return the dictionary.
     """
     w = watchlist
     if not isinstance(w['name'], str) or not len(w['name']):
@@ -114,6 +85,34 @@ def check_watchlist(watchlist):
     if not set(['description', 'stock_code']) <= set(p.columns):
         raise ValueError('Products must have "description" and "stock_code" fields')
    
+def read_watchlist(path):
+    """
+    Read a YAML file of watchlist data at the given path, parse the file,
+    check it, and return the resulting watchlist dictionary.
+    The YAML file should have the following form::
+
+        - name: Hello
+        - email_address: a@b.com
+        - products: |
+            description,stock_code
+            chips sis,267945
+            bagels bro,285453
+
+    """
+    # Read
+    path = Path(path)
+    with path.open('r') as src:
+        watchlist_yaml = yaml.load(src)
+
+    # Parse
+    watchlist = parse_watchlist(watchlist_yaml)
+
+    # Check
+    check_watchlist(watchlist)
+
+    # Create
+    return watchlist
+
 #-------------------------
 # Countdown API functions
 #-------------------------
@@ -191,10 +190,11 @@ def collect_products(stock_codes, as_df=True):
     For each item in the given list of stock codes (list of strings), call :func:`get_product`, parse the responses, and return the results as a list of dictionaries.
     If ``as_df``, then return the result as a DataFrame with columns equal to the keys listed in :func:`parse_product`.
     """
+    results = []
     for code in stock_codes:
         try:
-            r = get_product(code)
-            info = parse_product(r.text)
+            html = get_product(code)
+            info = parse_product(html)
             results.append(info)
         except:
             # Skip failures
@@ -220,7 +220,7 @@ async def get_product_a(stock_code):
          content = await response.text()
          return response, content
         
-async def collect_products_a(stock_codes, as_df=True):    
+async def collect_products_a_base(stock_codes, as_df):    
     """
     Asynchronous version of :func:`collect_products`.
     Must be called with ``curio.run(collect_products_a(*))``.
@@ -242,6 +242,13 @@ async def collect_products_a(stock_codes, as_df=True):
     
     return results.sort_values('name')
 
+def collect_products_a(stock_codes, as_df=True):
+    """
+    Asynchronous version of :func:`collect_products`.
+    Wraps :func:`collects_products_a_base`.
+    """
+    return curio.run(collect_products_a_base(stock_codes, as_df=as_df))
+
 #-------------------------
 # Data pipeline functions
 #-------------------------
@@ -262,16 +269,16 @@ def get_secret(key, secrets_path=ROOT/'secrets.json'):
         secrets = json.load(src)
     return secrets[key]
 
-def email(products, email_address, key, as_html=True):
+def email(products, email_address, mailgun_domain, mailgun_key, as_html=True):
     """
-    Email the given product DataFrame to the given email address using Mailgun with the given API key.
+    Email the given product DataFrame to the given email address using Mailgun with the given domain and API key.
     If ``as_html``, then write the email body as HTML; otherwise, write it as text.
     """
 
-    url = 'https://api.mailgun.net/v3/sandbox6de202ffd7c148a99c36a01718d1c2d1.mailgun.org/messages'
-    auth = ('api', key)
+    url = 'https://api.mailgun.net/v3/{!s}/messages'.format(mailgun_domain)
+    auth = ('api', mailgun_key)
     data = {
-        'from': 'Countdowner <postmaster@sandbox6de202ffd7c148a99c36a01718d1c2d1.mailgun.org>',
+        'from': 'Countdowner <hello@countdowner.io>',
         'to': email_address,
         'subject': 'Countdown sale on your watchlist items',
     }
@@ -282,10 +289,11 @@ def email(products, email_address, key, as_html=True):
 
     return requests.post(url, auth=auth, data=data)
 
-def run_pipeline(watchlist_path, out_dir, key=None, as_html=True):
+def run_pipeline(watchlist_path, out_dir, mailgun_domain=None, 
+  mailgun_key=None, as_html=True):
     """
     Read a YAML watchlist located at ``watchlist_path`` (string or Path object), one that :func:`read_watchlist` can read, collect all the product information from Countdown, and write the result to a CSV located in the directory ``out_dir`` (string or Path object), creating the directory if it does not exist.
-    If ``key`` (string; Mailgun API key) is given, then email the products on sale (if there are any) using :func:`email`.
+    If ``mailgun_domain`` (string) and ``mailgun_key`` are given, then email the products that are on sale (if there are any) using :func:`email`.
     """
     # Read products
     watchlist_path = Path(watchlist_path)
@@ -293,7 +301,7 @@ def run_pipeline(watchlist_path, out_dir, key=None, as_html=True):
     
     # Collect updates
     codes = w['products']['stock_code']
-    f = curio.run(collect_products_a(codes))
+    f = collect_products_a(codes)
     
     # Write product updates
     out_dir = Path(out_dir)
@@ -306,6 +314,7 @@ def run_pipeline(watchlist_path, out_dir, key=None, as_html=True):
     
     # Filter sale items
     g = filter_sales(f)
-    if not g.empty and key is not None:
+    if not g.empty and mailgun_domain is not None and mailgun_key is not None:
         # Email
-        email(g, w['email_address'], key, as_html=as_html)
+        email(g, w['email_address'], mailgun_domain, mailgun_key, 
+          as_html=as_html)
