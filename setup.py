@@ -17,10 +17,11 @@ setup(
     license=license,
     install_requires=[
         'PyYAML>=3.12',
-        'pandas>=0.20.0',
         'requests>=2.14.2',
         'curio>=0.7',
         'curio-http>=0.1.0',
+        'beautifulsoup4==4.6.0',
+        'pandas>=0.20.0',
         'click>=6.7',
     ],
     entry_points = {
