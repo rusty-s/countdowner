@@ -1,5 +1,6 @@
 secrets.json
 output
+ipynb/prototyping.ipynb
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

@@ -9,7 +9,7 @@ with open('LICENSE.txt') as f:
 
 setup(
     name='countdowner',
-    version='0.0.1',
+    version='0.1.0',
     author='Alex Raichev',
     url='',
     description='A Python 3.5+ package to check for sales at Countdown grocery stores throughout New Zealand',
@@ -18,10 +18,9 @@ setup(
     install_requires=[
         'PyYAML>=3.12',
         'requests>=2.14.2',
-        'curio>=0.7',
-        'curio-http>=0.1.0',
-        'beautifulsoup4==4.6.0',
-        'lxml==3.7.3',
+        'grequests>=0.3.0',
+        'beautifulsoup4>=4.6.0',
+        'lxml>=3.7.3',
         'pandas>=0.19.0',
         'click>=6.7',
     ],
