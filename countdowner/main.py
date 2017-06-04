@@ -118,14 +118,10 @@ def read_watchlist(path):
 #-------------------------
 def get_product(stock_code):
     """
-    Issue a GET request to Countdown at https://shop.countdown.co.nz/Shop/ProductDetails with the given stock code (string).
-    Return the text respones containing the details of the product with that stock code.
-    Raise an error if the GET request fails.
+    Issue a GET request to Countdown at https://shop.countdown.co.nz/Shop/ProductDetails with the given stock code (string), and return the response.
     """
     url = 'https://shop.countdown.co.nz/Shop/ProductDetails'
-    r = requests.get(url, params={'stockcode': stock_code})
-    r.raise_for_status()
-    return r.text
+    return requests.get(url, params={'stockcode': stock_code})
 
 def price_to_float(price_string):
     """
@@ -135,24 +131,42 @@ def price_to_float(price_string):
               
 def parse_product(html):
     """
-    Given a response from the Countdown API, parse it, and return in as a dictionary with the keys and values:
+    Given HTML text from a Countdown product page, parse it, and return the a dictionary with the following keys and their corresponding values.
 
     - ``'stock_code'``
     - ``'name'``
     - ``'description'``
     - ``'size'``
-    - ``'on_sale'``
     - ``'sale_price'``
     - ``'price'``
     - ``'unit_price'``
-    - ``'datetime'``
+    - ``'datetime'``: current datetime as a ``'%Y-%m-%dT%H:%M:%S'`` string
+
+    Use ``None`` values when the information is not found on the page.
     """
-    # Parse response
-    d = OrderedDict()
-    
+    d = OrderedDict()    
     soup = BeautifulSoup(html, 'lxml')
-    
-    d['stock_code'] = soup.find('input', id='stockcode')['value']
+    s = soup.find('input', id='stockcode')
+    if not s:
+        # Bad product page; return mostly null dict.
+        # Try to get stock code a different way
+        m = re.search(r'stockcode=(\d+)', html)
+        if m is not None:
+            d['stock_code'] = m.group(1)
+        else:
+            d['stock_code'] = None
+        d['name'] = None 
+        d['description'] = None
+        d['size'] = None 
+        d['sale_price'] = None 
+        d['price'] = None 
+        d['discount_percentage'] = None 
+        d['unit_price'] = None
+        d['datetime'] = dt.datetime.now().strftime('%Y-%m-%dT%H:%M:%S')
+        return d 
+
+    # Good product page; carry on
+    d['stock_code'] = s['value']
     d['name'] = soup.find('div', class_='product-title').h1.text.strip()
     d['description']= soup.find('p', class_='product-description-text').text.strip() or None
     d['size'] = soup.find('span', class_='volume-size').text.strip() or None
@@ -161,21 +175,18 @@ def parse_product(html):
     s2 = soup.find('span', class_='club-price-wrapper')
     s3 = soup.find('span', class_='price')
     if s1:
-        d['on_sale'] = True
         d['sale_price'] = price_to_float(list(s1.stripped_strings)[0])
         t = soup.find('span', class_='was-price')
         d['price'] = price_to_float(list(t.stripped_strings)[0].replace('was', ''))
     elif s2:
-        d['on_sale'] = True
         d['sale_price'] = price_to_float(list(s2.stripped_strings)[0])
         t = soup.find('span', class_='grid-non-club-price')
         d['price'] = price_to_float(list(t.stripped_strings)[0].replace('non club price', ''))
     elif s3:
-        d['on_sale'] = False
         d['sale_price'] = None    
         d['price'] = price_to_float(list(s3.stripped_strings)[0])
 
-    if d['on_sale']:
+    if d['sale_price'] is not None:
         d['discount_percentage'] = 100*(1 - d['sale_price']/d['price'])
     else:
         d['discount_percentage'] = None 
@@ -192,13 +203,10 @@ def collect_products(stock_codes, as_df=True):
     """
     results = []
     for code in stock_codes:
-        try:
-            html = get_product(code)
-            info = parse_product(html)
+        response = get_product(code)
+        if response.status_code == 200:
+            info = parse_product(response.text)
             results.append(info)
-        except:
-            # Skip failures
-            continue
         
     if as_df:
         results = pd.DataFrame(results)
@@ -234,8 +242,9 @@ async def collect_products_a_base(stock_codes, as_df):
     for task in tasks:
         response, content = await task.join()
         if response.status_code == 200:
-            results.append(parse_product(content))
-    
+            info = parse_product(content)
+            results.append(info)
+
     if as_df:
         results = pd.DataFrame(results)
         results['datetime'] = pd.to_datetime(results['datetime'])
@@ -257,8 +266,7 @@ def filter_sales(products):
     Given a DataFrame of products of the form returned by :func:`collect_products`, keep only the items on sale and the columns ``['name', 'sale_price', 'price', 'discount']``.
     """
     cols = ['name', 'sale_price', 'price', 'discount_percentage']
-    f = products.loc[products['on_sale'], cols].copy()
-    return f
+    return products.loc[products['sale_price'].notnull(), cols].copy()
 
 def get_secret(key, secrets_path=ROOT/'secrets.json'):
     """
@@ -277,10 +285,12 @@ def email(products, email_address, mailgun_domain, mailgun_key, as_html=True):
 
     url = 'https://api.mailgun.net/v3/{!s}/messages'.format(mailgun_domain)
     auth = ('api', mailgun_key)
+    subject = '{!s} sales on your Countdown watchlist'.format(
+      products.shape[0])
     data = {
         'from': 'Countdowner <hello@countdowner.io>',
         'to': email_address,
-        'subject': 'Countdown sale on your watchlist items',
+        'subject': subject,
     }
     if as_html:
         data['html'] = products.to_html(index=False, float_format='%.2f')
@@ -293,7 +303,7 @@ def run_pipeline(watchlist_path, out_dir, mailgun_domain=None,
   mailgun_key=None, as_html=True):
     """
     Read a YAML watchlist located at ``watchlist_path`` (string or Path object), one that :func:`read_watchlist` can read, collect all the product information from Countdown, and write the result to a CSV located in the directory ``out_dir`` (string or Path object), creating the directory if it does not exist.
-    If ``mailgun_domain`` (string) and ``mailgun_key`` are given, then email the products that are on sale (if there are any) using :func:`email`.
+    If ``mailgun_domain`` (string) and ``mailgun_key`` are given, then send an email with the possibly empty list of products on sale using :func:`email`.
     """
     # Read products
     watchlist_path = Path(watchlist_path)
@@ -314,7 +324,6 @@ def run_pipeline(watchlist_path, out_dir, mailgun_domain=None,
     
     # Filter sale items
     g = filter_sales(f)
-    if not g.empty and mailgun_domain is not None and mailgun_key is not None:
-        # Email
+    if mailgun_domain is not None and mailgun_key is not None:
         email(g, w['email_address'], mailgun_domain, mailgun_key, 
           as_html=as_html)
