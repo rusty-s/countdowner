@@ -40,3 +40,19 @@ Notes
 - Development status is Alpha
 - This project uses semantic versioning
 - I might extend this to New World stores once they roll out `more online shopping <http://www.newworld.co.nz/online-shopping/>`_
+- Will replace ``grequests`` with a faster asynchronous HTTP requester as soon as someone makes one for ``trio``
+
+
+History
+========
+
+0.1.0, 2017-06-04
+-------------------
+- Replaced ``curio`` and ``curio-http`` with ``grequests`` for asynchronous requests. The latter is slower but easier to use.
+- Handled invalid stock codes
+- Added some automated tests
+
+
+0.0.1, 2017-05-30
+------------------
+- First draft
