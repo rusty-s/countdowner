@@ -2,6 +2,7 @@ import tempfile
 
 from click.testing import CliRunner
 
+from .context import countdowner, DATA_DIR, is_connected
 from countdowner import *
 from countdowner.cli import *
 

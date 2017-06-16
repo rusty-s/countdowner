@@ -16,7 +16,7 @@ import pandas as pd
 ROOT = Path(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 WATCHLIST_FIELDS = [
   'name',
-  'email_address',
+  'email_addresses',
   'products',
 ]
 EMAIL_PATTERN = re.compile(r'[^@]+@[^@]+\.[^@]+')
@@ -75,8 +75,9 @@ def check_watchlist(watchlist):
     if not isinstance(w['name'], str) or not len(w['name']):
         raise ValueError('Name must be a nonempty string')
 
-    if not valid_email(w['email_address']):
-        raise ValueError('Invalid email address')
+    for e in w['email_addresses']:
+        if not valid_email(e):
+            raise ValueError('Invalid email address', e)
 
     p = w['products']
     if p is None:
@@ -93,7 +94,7 @@ def read_watchlist(path):
     The YAML file should have the following form::
 
         - name: Hello
-        - email_address: a@b.com
+        - email_addresses: [a@b.com, c@d.net]
         - products: |
             description,stock_code
             chips sis,267945
@@ -261,7 +262,7 @@ def get_secret(key, secrets_path=ROOT/'secrets.json'):
         secrets = json.load(src)
     return secrets[key]
 
-def email(products, email_address, mailgun_domain, mailgun_key, as_html=True):
+def email(products, email_addresses, mailgun_domain, mailgun_key, as_html=True):
     """
     Email the given product DataFrame to the given email address
     using Mailgun with the given domain and API key.
@@ -271,11 +272,12 @@ def email(products, email_address, mailgun_domain, mailgun_key, as_html=True):
 
     url = 'https://api.mailgun.net/v3/{!s}/messages'.format(mailgun_domain)
     auth = ('api', mailgun_key)
+    to = ', '.join(email_addresses)
     subject = '{!s} sales on your Countdown watchlist'.format(
       products.shape[0])
     data = {
         'from': 'Countdowner <hello@countdowner.io>',
-        'to': email_address,
+        'to': to,
         'subject': subject,
     }
     if as_html:
@@ -318,5 +320,5 @@ def run_pipeline(watchlist_path, out_dir, mailgun_domain=None,
     # Filter sale items
     g = filter_sales(f)
     if mailgun_domain is not None and mailgun_key is not None:
-        email(g, w['email_address'], mailgun_domain, mailgun_key,
+        email(g, w['email_addresses'], mailgun_domain, mailgun_key,
           as_html=as_html)

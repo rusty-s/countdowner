@@ -1,5 +1,7 @@
 name: test
-email_address: brainbummer@mailinator.com
+email_addresses:
+  - brainbummer@mailinator.com
+  - rhymedude@mailinator.com
 products: |
   description,stock_code
   organic cheese,281739
