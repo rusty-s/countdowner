@@ -11,7 +11,7 @@ setup(
     name='countdowner',
     version='0.2.0',
     author='Alex Raichev',
-    url='',
+    url='https://github.com/araichev/countdowner',
     description='A Python 3.5+ package to check for sales at Countdown'
         'grocery stores throughout New Zealand',
     long_description=readme,
