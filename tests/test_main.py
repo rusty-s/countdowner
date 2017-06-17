@@ -2,28 +2,27 @@ import tempfile
 
 import requests
 import grequests
+import responses
 import pandas as pd
-import pytest
 
-from .context import countdowner, DATA_DIR, is_connected
+from .context import countdowner, DATA_DIR
 from countdowner import *
 
-
-def build_mock_request(stock_code):
-    r = requests.models.Response()
-    setattr(r, 'url',
-      'https://shop.countdown.co.nz/Shop/ProductDetails?stockcode='
-      + stock_code)
-    return r
 
 def test_read_watchlist():
     w = read_watchlist(DATA_DIR/'watchlist.yaml')
     assert isinstance(w, dict)
+    expect_keys = {'products', 'email_addresses', 'name'}
+    assert set(w.keys()) == expect_keys
     assert isinstance(w['products'], pd.DataFrame)
 
-@pytest.mark.skipif(not is_connected(),
-  reason="Requires an internet connection")
+@responses.activate
 def test_get_product():
+    # Create mock GET response
+    responses.add(responses.GET,
+      'https://shop.countdown.co.nz/Shop/ProductDetails',
+      status=200, body='junk', content_type='text/xml')
+
     r = get_product('hello')
     assert isinstance(r, requests.models.Response)
 
@@ -31,7 +30,9 @@ def test_get_product():
     assert isinstance(r, grequests.AsyncRequest)
 
 def test_parse_product():
-    r = build_mock_request('bingo')
+    r = requests.models.Response()
+    setattr(r, 'url',
+      'https://shop.countdown.co.nz/Shop/ProductDetails?stockcode=bingo')
     p = parse_product(r)
     assert isinstance(p, dict)
     keys = [
@@ -48,9 +49,13 @@ def test_parse_product():
     assert set(p.keys()) == set(keys)
     assert p['stock_code'] == 'bingo'
 
-@pytest.mark.skipif(not is_connected(),
-  reason="Requires an internet connection")
+@responses.activate
 def test_collect_products():
+    # Create mock GET response
+    responses.add(responses.GET,
+      'https://shop.countdown.co.nz/Shop/ProductDetails',
+      status=200, body='junk', content_type='text/xml')
+
     f = collect_products(['bingo', '260803'])
     assert isinstance(f, pd.DataFrame)
     assert f.shape == (2, 9)
@@ -68,21 +73,35 @@ def test_filter_sales():
     assert isinstance(g, pd.DataFrame)
     assert g.empty
 
-@pytest.mark.skipif(not is_connected(),
-  reason="Requires an internet connection")
+@responses.activate
 def test_email():
+    # Create mock POST response
+    domain = 'fake'
+    responses.add(responses.POST,
+      'https://api.mailgun.net/v3/{!s}/messages'.format(domain),
+      status=200, body='junk', content_type='application/json')
+
     products = pd.DataFrame([['a', 2, 3, 20.1]],
       columns=['name', 'sale_price', 'price', 'discount_percentage'])
-    r = email(products, 'a@b.com', 'fake', 'fake')
-    print(r)
-    assert r.status_code == 401  # unauthorized error
+    r = email(products, ['a@b.com'], domain, 'fake')
+    assert r.status_code == 200
 
-@pytest.mark.skipif(not is_connected(),
-  reason="Requires an internet connection")
+@responses.activate
 def test_run_pipeline():
+    # Create mock GET response
+    responses.add(responses.GET,
+      'https://shop.countdown.co.nz/Shop/ProductDetails',
+      status=200, body='junk', content_type='text/xml')
+
+    # Create mock POST response
+    domain = 'fake'
+    responses.add(responses.POST,
+      'https://api.mailgun.net/v3/{!s}/messages'.format(domain),
+      status=200, body='junk', content_type='application/json')
+
     w_path = DATA_DIR/'watchlist.yaml'
     with tempfile.TemporaryDirectory() as tmp:
-        run_pipeline(w_path, tmp)
+        run_pipeline(w_path, tmp, domain, 'api_key')
         # Should write a file
         file_list = list(Path(tmp).iterdir())
         assert len(file_list) == 1
