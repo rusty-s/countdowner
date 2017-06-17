@@ -2,6 +2,8 @@ appdirs==1.4.3
 beautifulsoup4==4.6.0
 bleach==2.0.0
 click==6.7
+cookies==2.2.1
+-e git+git@github.com:araichev/countdowner.git@a2ab891d0de07f88703ebafaa0bf19cbe560de4c#egg=countdowner
 decorator==4.0.11
 entrypoints==0.2.2
 gevent==1.2.1
@@ -45,6 +47,7 @@ PyYAML==3.12
 pyzmq==16.0.2
 qtconsole==4.3.0
 requests==2.14.2
+responses==0.5.1
 simplegeneric==0.8.1
 six==1.10.0
 terminado==0.6

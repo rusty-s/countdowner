@@ -9,10 +9,11 @@ with open('LICENSE.txt') as f:
 
 setup(
     name='countdowner',
-    version='0.1.0',
+    version='0.2.0',
     author='Alex Raichev',
     url='',
-    description='A Python 3.5+ package to check for sales at Countdown grocery stores throughout New Zealand',
+    description='A Python 3.5+ package to check for sales at Countdown'
+        'grocery stores throughout New Zealand',
     long_description=readme,
     license=license,
     install_requires=[
@@ -24,9 +25,8 @@ setup(
         'pandas>=0.19.0',
         'click>=6.7',
     ],
-    entry_points = {
+    entry_points={
         'console_scripts': ['countdownit=countdowner.cli:countdownit'],
     },
-    packages=find_packages(exclude=('tests', 'docs')),   
+    packages=find_packages(exclude=('tests', 'docs')),
 )
-
