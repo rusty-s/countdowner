@@ -1,5 +1,8 @@
 Countdowner
 ************
+.. image:: https://travis-ci.org/araichev/countdowner.svg?branch=master
+    :target: https://travis-ci.org/araichev/countdowner
+
 A Python 3.4+ package to check for sales at Countdown grocery stores throughout New Zealand.
 Pretty rough, but gets the job done.
 
