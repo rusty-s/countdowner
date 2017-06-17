@@ -1,6 +1,6 @@
 Countdowner
 ************
-A Python 3.5+ package to check for sales at Countdown grocery stores throughout New Zealand.
+A Python 3.4+ package to check for sales at Countdown grocery stores throughout New Zealand.
 Pretty rough, but gets the job done.
 
 
@@ -18,7 +18,9 @@ Here is a common workflow.
 #. Put your stock codes into a YAML watchlist along with your email address and a name for the watchlist.  The watchlist ---call it ``watchlist.yaml``--- should have the form::
 
 	name: my_favorites
-	email_address: brainbummer@mailinator.com
+	email_addresses:
+      - brainbummer@mailinator.com
+      - rhymedude@mailinator.com
 	products: |
 	  description,stock_code
 	  organic cheese,281739
@@ -45,6 +47,12 @@ Notes
 
 History
 ========
+
+0.2.0, 2017-06-18
+-------------------
+- Allowed for multiple email addresses in watchlist
+- In tests, replaced actual HTTP requests with mock ones
+
 
 0.1.0, 2017-06-04
 -------------------

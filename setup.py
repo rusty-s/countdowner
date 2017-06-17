@@ -9,7 +9,7 @@ with open('LICENSE.txt') as f:
 
 setup(
     name='countdowner',
-    version='0.1.0',
+    version='0.2.0',
     author='Alex Raichev',
     url='',
     description='A Python 3.5+ package to check for sales at Countdown'
