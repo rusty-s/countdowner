@@ -20,17 +20,17 @@ Here is a common workflow.
 
 #. Put your stock codes into a YAML watchlist along with your email address and a name for the watchlist.  The watchlist ---call it ``watchlist.yaml``--- should have the form::
 
-	name: my_favorites
-	email_addresses:
+    name: my_favorites
+    email_addresses:
       - brainbummer@mailinator.com
       - rhymedude@mailinator.com
-	products: |
-	  description,stock_code
-	  organic cheese,281739
-	  GB chocolate,260803
-	  Lupi olive oil,701829
-	  Earthcare double toilet paper,381895
-	  Dijon mustard,700630
+    products: |
+      description,stock_code
+      organic cheese,281739
+      GB chocolate,260803
+      Lupi olive oil,701829
+      Earthcare double toilet paper,381895
+      Dijon mustard,700630
 
 #. Use the ``countdowner`` library functions as in the IPython notebook at ``ipynb/examples.ipynb`` or run ``countdownit --help`` from the command line for information on the command line tool.  To use the emailing functionality of ``countdowner``, you'll need a (free) `Mailgun account <https://mailgun.com>`_.
 
